@@ -1,111 +1,147 @@
-# Don't Remove Credit @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot @Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+# Patched by ChatGPT – Pyrogram v2 compatible
 
-import sys
-import glob
-import importlib
-from pathlib import Path
-from pyrogram import idle
-import logging
-import logging.config
+import re
+import os
+import json
+import base64
+from pyrogram import Client, filters
+from pyrogram.errors import ChannelInvalid, UsernameInvalid, UsernameNotModified
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-# Get logging configurations
-logging.config.fileConfig('logging.conf')
-logging.getLogger().setLevel(logging.INFO)
-logging.getLogger("pyrogram").setLevel(logging.ERROR)
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+from config import ADMINS, LOG_CHANNEL, PUBLIC_FILE_STORE, WEBSITE_URL, WEBSITE_URL_MODE
+from plugins.users_api import get_user, get_short_link
 
 
-from pyrogram import Client, __version__
-from pyrogram.raw.all import layer
-from config import LOG_CHANNEL, ON_HEROKU, CLONE_MODE, PORT
-from typing import Union, Optional, AsyncGenerator
-from pyrogram import types
-from Script import script 
-from datetime import date, datetime 
-import pytz
-from aiohttp import web
-from TechVJ.server import web_server
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-import asyncio
-from pyrogram import idle
-from plugins.clone import restart_bots
-from TechVJ.bot import StreamBot
-from TechVJ.utils.keepalive import ping_server
-from TechVJ.bot.clients import initialize_clients
-
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+async def allowed(_, __, message):
+    if PUBLIC_FILE_STORE:
+        return True
+    if message.from_user and message.from_user.id in ADMINS:
+        return True
+    return False
 
 
-ppath = "plugins/*.py"
-files = glob.glob(ppath)
-StreamBot.start()
-loop = asyncio.get_event_loop()
+@Client.on_message((filters.document | filters.video | filters.audio) & filters.private)
+async def incoming_gen_link(bot, message):
+    if not await allowed(bot, None, message):
+        return
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+    username = (await bot.get_me()).username
+    post = await message.copy(LOG_CHANNEL)
+
+    string = f"file_{post.id}"
+    outstr = base64.urlsafe_b64encode(string.encode()).decode().strip("=")
+
+    user = await get_user(message.from_user.id)
+
+    if WEBSITE_URL_MODE:
+        share_link = f"{WEBSITE_URL}?Tech_VJ={outstr}"
+    else:
+        share_link = f"https://t.me/{username}?start={outstr}"
+
+    if user.get("base_site") and user.get("shortener_api"):
+        share_link = await get_short_link(user, share_link)
+
+    await message.reply(
+        f"<b>⭕ HERE IS YOUR LINK\n\n🔗 {share_link}</b>"
+    )
 
 
-async def start():
-    print('\n')
-    print('Initalizing Tech VJ Bot')
-    bot_info = await StreamBot.get_me()
-    StreamBot.username = bot_info.username
-    await initialize_clients()
-    for name in files:
-        with open(name) as a:
-            patt = Path(a.name)
-            plugin_name = patt.stem.replace(".py", "")
-            plugins_dir = Path(f"plugins/{plugin_name}.py")
-            import_path = "plugins.{}".format(plugin_name)
-            spec = importlib.util.spec_from_file_location(import_path, plugins_dir)
-            load = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(load)
-            sys.modules["plugins." + plugin_name] = load
-            print("Tech VJ Imported => " + plugin_name)
-    if ON_HEROKU:
-        asyncio.create_task(ping_server())
-    me = await StreamBot.get_me()
-    tz = pytz.timezone('Asia/Kolkata')
-    today = date.today()
-    now = datetime.now(tz)
-    time = now.strftime("%H:%M:%S %p")
-    app = web.AppRunner(await web_server())
-    await StreamBot.send_message(chat_id=LOG_CHANNEL, text=script.RESTART_TXT.format(today, time))
-    await app.setup()
-    bind_address = "0.0.0.0"
-    await web.TCPSite(app, bind_address, PORT).start()
-    if CLONE_MODE == True:
-        await restart_bots()
-    print("Bot Started Powered By @VJ_Bots")
-    await idle()
+@Client.on_message(filters.command("link") & filters.private)
+async def gen_link_s(bot, message):
+    if not await allowed(bot, None, message):
+        return
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+    replied = message.reply_to_message
+    if not replied:
+        return await message.reply("Reply to a file to generate link.")
 
-if __name__ == '__main__':
+    username = (await bot.get_me()).username
+    post = await replied.copy(LOG_CHANNEL)
+
+    string = f"file_{post.id}"
+    outstr = base64.urlsafe_b64encode(string.encode()).decode().strip("=")
+
+    user = await get_user(message.from_user.id)
+
+    if WEBSITE_URL_MODE:
+        share_link = f"{WEBSITE_URL}?Tech_VJ={outstr}"
+    else:
+        share_link = f"https://t.me/{username}?start={outstr}"
+
+    if user.get("base_site") and user.get("shortener_api"):
+        share_link = await get_short_link(user, share_link)
+
+    await message.reply(
+        f"<b>⭕ HERE IS YOUR LINK\n\n🔗 {share_link}</b>"
+    )
+
+
+@Client.on_message(filters.command("batch") & filters.private)
+async def gen_link_batch(bot, message):
+    if not await allowed(bot, None, message):
+        return
+
+    if not message.text or len(message.text.split()) != 3:
+        return await message.reply(
+            "Use:\n/batch first_link last_link"
+        )
+
+    _, first, last = message.text.split()
+    regex = re.compile(r"(https://)?t\.me/(c/)?([\w\d_]+)/(\d+)")
+
+    m1 = regex.match(first)
+    m2 = regex.match(last)
+    if not m1 or not m2:
+        return await message.reply("Invalid links.")
+
+    chat_id = m1.group(3)
+    start_id = int(m1.group(4))
+    end_id = int(m2.group(4))
+
+    if chat_id.isdigit():
+        chat_id = int("-100" + chat_id)
+
     try:
-        loop.run_until_complete(start())
-    except KeyboardInterrupt:
-        logging.info('Service Stopped Bye 👋')
+        await bot.get_chat(chat_id)
+    except ChannelInvalid:
+        return await message.reply("Make me admin in that channel.")
+    except (UsernameInvalid, UsernameNotModified):
+        return await message.reply("Invalid channel.")
 
+    status = await message.reply("Generating batch link...")
 
-# Don't Remove Credit Tg - @VJ_Bots
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
+    files = []
+    async for msg in bot.iter_messages(
+        chat_id=chat_id,
+        min_id=start_id - 1,
+        max_id=end_id
+    ):
+        if msg.document or msg.video or msg.audio:
+            files.append({"c": chat_id, "m": msg.id})
+
+    if not files:
+        return await status.edit("No files found.")
+
+    fname = f"batch_{message.from_user.id}.json"
+    with open(fname, "w") as f:
+        json.dump(files, f)
+
+    doc = await bot.send_document(
+        LOG_CHANNEL,
+        fname,
+        caption="Batch file"
+    )
+    os.remove(fname)
+
+    username = (await bot.get_me()).username
+    batch_code = base64.urlsafe_b64encode(
+        f"BATCH-{doc.id}".encode()
+    ).decode().strip("=")
+
+    if WEBSITE_URL_MODE:
+        link = f"{WEBSITE_URL}?Tech_VJ={batch_code}"
+    else:
+        link = f"https://t.me/{username}?start={batch_code}"
+
+    await status.edit(
+        f"<b>⭕ BATCH LINK READY\n\n📦 Files: {len(files)}\n🔗 {link}</b>"
+    )
